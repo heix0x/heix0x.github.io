@@ -1,0 +1,13 @@
+# 站点标题：显示在浏览器标签页上，也显示在页面左上角
+title: heix0x
+
+# 站点描述：搜索引擎结果里显示这一句
+description: 软件工程 · Java 后端
+
+# 主题。只能用 GitHub 白名单里的那几个，预览见 https://pages.github.com/themes/
+theme: jekyll-theme-minimal
+
+# ⚠️ 不要加 baseurl。
+#    这个仓库叫 heix0x.github.io，是「用户站点」—— 站点根就是仓库根，路径是 https://heix0x.github.io/
+#    网上教程里的 baseurl 是给「项目站点」（https://heix0x.github.io/某个仓库/）写的，
+#    在这里加上反而会让 CSS 和图片全部 404，页面变成纯白。

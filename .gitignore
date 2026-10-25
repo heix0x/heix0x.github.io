@@ -1,0 +1,13 @@
+# Obsidian 本地配置：workspace.json 每次开关 Obsidian 都会变，进去只会产生无意义改动
+.obsidian/
+
+# 系统杂项
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 大文件与凭据
+*.zip
+*.mp3
+*.MP4
+data.json
