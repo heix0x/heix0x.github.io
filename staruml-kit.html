@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DSL → StarUML .mdj 生成器</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:13px;color:#1f2328;background:#f6f8fa}
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid #d0d7de;flex-wrap:wrap}
+  header h1{font-size:14px;font-weight:600;margin:0 12px 0 0}
+  button{font:inherit;padding:6px 12px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;cursor:pointer;color:#1f2328}
+  button:hover{background:#eef1f4}
+  button.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  button.primary:hover{background:#1a5fd0}
+  main{flex:1;display:flex;min-height:0}
+  .pane{display:flex;flex-direction:column;min-width:0}
+  .left{width:400px;border-right:1px solid #d0d7de;background:#fff}
+  .right{flex:1;background:#fff}
+  .pane-head{padding:7px 12px;border-bottom:1px solid #eaeef2;font-size:12px;color:#57606a;display:flex;justify-content:space-between;align-items:center}
+  textarea{flex:1;border:0;outline:0;resize:none;padding:10px 12px;font-family:Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.65;tab-size:2;color:#1f2328}
+  #preview{flex:1;overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center}
+  svg{max-width:100%;height:auto}
+  #msg{padding:8px 12px;font-size:12px;border-top:1px solid #eaeef2;min-height:33px;color:#57606a;white-space:pre-wrap}
+  #msg.err{color:#cf222e;background:#fff5f5}
+  #msg.ok{color:#1a7f37;background:#f3fbf5}
+  .hint{font-size:11.5px;color:#8b949e;line-height:1.7;padding:0 12px 10px}
+  code{background:#eef1f4;padding:1px 4px;border-radius:3px;font-family:Consolas,monospace}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f2328;color:#fff;padding:8px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;font-size:12.5px}
+  .toast.show{opacity:.94}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:22px;z-index:60}
+  .modal.show{display:flex}
+  .sheet{background:#fff;border-radius:12px;width:100%;max-width:780px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(15,23,42,.22);overflow:hidden}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e6e9ec}
+  .sheet-head strong{font-size:14px;font-weight:600}
+  .sheet-body{padding:6px 24px 26px;overflow:auto;line-height:1.75;font-size:13px}
+  .sheet-body h2{font-size:15px;font-weight:600;margin:24px 0 8px;padding-top:4px}
+  .sheet-body h2:first-child{margin-top:18px}
+  .sheet-body h3{font-size:13px;font-weight:600;margin:16px 0 6px;color:#3d444d}
+  .sheet-body p{margin:6px 0}
+  .sheet-body ul,.sheet-body ol{margin:6px 0;padding-left:22px}
+  .sheet-body li{margin:3px 0}
+  .sheet-body table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+  .sheet-body th,.sheet-body td{border:1px solid #e2e6ea;padding:6px 10px;text-align:left;vertical-align:top}
+  .sheet-body th{background:#f5f7f9;font-weight:600}
+  .sheet-body pre{background:#f5f7f9;border:1px solid #e6e9ec;border-radius:6px;padding:10px 12px;margin:8px 0;font-family:Consolas,"Courier New",monospace;font-size:12px;line-height:1.6;overflow:auto;white-space:pre}
+  .sheet-body code{background:#eef1f4;padding:1px 5px;border-radius:3px;font-family:Consolas,monospace;font-size:12px}
+  .sheet-body pre code{background:none;padding:0;font-size:12px}
+  .sheet-body .note{background:#f0f6ff;border-left:3px solid #1f6feb;padding:9px 12px;border-radius:0 5px 5px 0;margin:10px 0;font-size:12.5px}
+  .close{background:none;border:0;font-size:18px;line-height:1;cursor:pointer;color:#57606a;padding:4px 6px;border-radius:5px}
+  .close:hover{background:#eef1f4}
+</style>
+</head>
+<body>
+<header>
+  <h1>DSL → StarUML .mdj</h1>
+  <button class="primary" id="btnBuild">生成并下载 .mdj</button>
+  <button id="btnJson">复制 JSON</button>
+  <button id="btnCopyPrompt">复制给 DeepSeek 的说明</button>
+  <button id="btnSample">载入示例</button>
+  <button id="btnClear">清空</button>
+  <button id="btnHelp" style="margin-left:auto">使用说明</button>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入（每行一个节点或连线）</span><span id="stat"></span></div>
+    <textarea id="src" spellcheck="false" placeholder="第一行可写：title: 我的流程图&#10;&#10;节点写法：  文本 | 类型&#10;类型：terminator / process / decision / data&#10;&#10;连线写法：  A -> B&#10;带标签：    A -> B : 是&#10;回边：      A -> B : back&#10;出线方向：  A -> B : 是, left"></textarea>
+    <div class="hint">
+      <code>terminator</code> 起止 · <code>process</code> 处理 · <code>decision</code> 判断 · <code>data</code> 输入输出<br>
+      节点文本必须唯一，连线用文本互相引用。标了 <code>back</code> 的线会绕到外侧并从判断上方进入。
+    </div>
+    <div id="msg">等待输入。</div>
+  </section>
+  <section class="pane right">
+    <div class="pane-head"><span>预览</span><span id="dim"></span></div>
+    <div id="preview"></div>
+  </section>
+</main>
+<div class="modal" id="help">
+  <div class="sheet">
+    <div class="sheet-head">
+      <strong>使用说明</strong>
+      <button class="close" id="btnHelpClose" title="关闭">×</button>
+    </div>
+    <div class="sheet-body">
+
+      <h2>准备</h2>
+      <ul>
+        <li>本机已安装 <b>StarUML 5.0.2</b> 或更高版本</li>
+        <li>一个浏览器（Edge / Chrome 均可，无需联网）</li>
+      </ul>
+
+      <h2>五步生成一张流程图</h2>
+      <ol>
+        <li>点顶部 <b>「复制给 DeepSeek 的说明」</b>。</li>
+        <li>打开 DeepSeek 网页，粘贴这段说明，再贴上题目。</li>
+        <li>复制 DeepSeek 返回的文字，粘贴到左侧输入框，右侧立即出现预览。</li>
+        <li>点 <b>「生成并下载 .mdj」</b>。</li>
+        <li><b>完全退出 StarUML</b>，再双击下载的 .mdj 文件。</li>
+      </ol>
+      <div class="note">第 5 步不能省。StarUML 在打开状态下会把内存里的旧内容写回文件，看起来像生成失败。</div>
+
+      <h2>语法速查</h2>
+      <p>节点写法：<code>框里的文字 | 类型</code></p>
+      <table>
+        <tr><th>类型</th><th>形状</th><th>用途</th></tr>
+        <tr><td><code>terminator</code></td><td>圆头框</td><td>开始 / 结束</td></tr>
+        <tr><td><code>process</code></td><td>矩形</td><td>处理、赋值、计算</td></tr>
+        <tr><td><code>decision</code></td><td>菱形</td><td>判断</td></tr>
+        <tr><td><code>data</code></td><td>平行四边形</td><td>输入 / 输出</td></tr>
+      </table>
+      <p>连线写法：<code>A -&gt; B</code></p>
+      <table>
+        <tr><th>写法</th><th>说明</th></tr>
+        <tr><td><code>A -&gt; B</code></td><td>连接两个框</td></tr>
+        <tr><td><code>A -&gt; B : 是</code></td><td>线上带标签</td></tr>
+        <tr><td><code>A -&gt; B : back</code></td><td>循环回边，自动绕外侧</td></tr>
+        <tr><td><code>A -&gt; B : 是, left</code></td><td>指定从左侧出线</td></tr>
+      </table>
+
+      <h2>导出图片（交作业用）</h2>
+      <p>在 StarUML 中打开 .mdj，菜单 <b>File → Export As → PNG</b>，在对话框里把宽度设为 2000 px 以上，导出的图清晰可打印。</p>
+
+      <h2>常见问题</h2>
+      <table>
+        <tr><th>现象</th><th>处理</th></tr>
+        <tr><td>提示「起点没有定义」</td><td>连线里的名字与节点行不一致，检查空格和全半角。</td></tr>
+        <tr><td>下载后打不开</td><td>先完全退出 StarUML，再双击文件。</td></tr>
+        <tr><td>所有框叠在左上角</td><td>刷新页面重新生成；仍有问题看左侧的报错行。</td></tr>
+        <tr><td>连线穿过框</td><td>给该连线加上 <code>back</code>。</td></tr>
+      </table>
+
+      <h2>原理</h2>
+      <p>.mdj 文件分两层：模型层记录有哪些框、怎么连；视图层记录每个框的坐标和每条线的拐点。StarUML 不做自动排版，坐标必须提前算好。</p>
+      <p>本工具让 AI 只输出框和连线（十几行文字），坐标、编号、文件结构由页面内的代码生成。</p>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const KINDS = {
+  terminator: {model:"FCTerminator", w:100, h:44},
+  process:    {model:"FCProcess",    w:170, h:50},
+  decision:   {model:"FCDecision",   w:180, h:90},
+  data:       {model:"FCData",       w:180, h:50}
+};
+const FONT = "Arial;13;0";
+const GAP_Y = 44;
+const GAP_X = 56;
+const PAD = 40;
+
+function nid(){
+  for(;;){
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    let s = "";
+    for(const c of b) s += String.fromCharCode(c);
+    const enc = btoa(s);
+    if(enc.indexOf("/") === -1) return enc;
+  }
+}
+
+function charW(ch){ return /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 13 : 7.3; }
+function textW(t){ let w = 0; for(const c of t) w += charW(c); return w; }
+
+/* ---------------- DSL 解析 ---------------- */
+function parse(src){
+  const lines = src.split(/\r?\n/);
+  const model = {title:"Untitled", nodes:[], edges:[], errors:[]};
+  const byText = new Map();
+
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if(!line || line.startsWith("#")) return;
+
+    if(/^title\s*[:：]/i.test(line)){
+      model.title = line.replace(/^title\s*[:：]\s*/i, "").trim() || "Untitled";
+      return;
+    }
+
+    // 边：A -> B  [: 标签]  [, 方向]
+    if(line.indexOf("->") !== -1){
+      const [lhs, rhsRaw] = line.split("->");
+      const from = lhs.trim();
+      let rest = rhsRaw.trim();
+      let label = "", dir = "", back = false;
+
+      if(rest.indexOf(":") !== -1){
+        const idx = rest.indexOf(":");
+        const after = rest.slice(idx + 1).trim();
+        rest = rest.slice(0, idx).trim();
+        const parts = after.split(",").map(s => s.trim()).filter(Boolean);
+        for(const p of parts){
+          const low = p.toLowerCase();
+          if(low === "back" || p === "回边") back = true;
+          else if(["left","right","top","bottom"].includes(low)) dir = low;
+          else label = p;
+        }
+      }
+      if(!byText.has(from)){ model.errors.push(`第 ${i+1} 行：连线起点「${from}」没有定义`); return; }
+      if(!byText.has(rest)){ model.errors.push(`第 ${i+1} 行：连线终点「${rest}」没有定义`); return; }
+      model.edges.push({from, to:rest, label, dir, back});
+      return;
+    }
+
+    // 节点：文本 | 类型
+    const bar = line.lastIndexOf("|");
+    if(bar === -1){ model.errors.push(`第 ${i+1} 行：无法识别「${line}」（节点要写成 文本 | 类型）`); return; }
+    const text = line.slice(0, bar).trim();
+    const kindRaw = line.slice(bar + 1).trim().toLowerCase();
+    const kind = KINDS[kindRaw] ? kindRaw : null;
+    if(!text){ model.errors.push(`第 ${i+1} 行：节点文本为空`); return; }
+    if(!kind){ model.errors.push(`第 ${i+1} 行：未知类型「${kindRaw}」，只能是 terminator / process / decision / data`); return; }
+    if(byText.has(text)){ model.errors.push(`第 ${i+1} 行：节点「${text}」重复`); return; }
+
+    const n = {id:text, text, kind};
+    byText.set(text, n);
+    model.nodes.push(n);
+  });
+
+  if(!model.nodes.length) model.errors.push("没有解析到任何节点。");
+  return model;
+}
+
+/* ---------------- 布局 ---------------- */
+function layout(model){
+  const nodes = model.nodes;
+  const map = new Map(nodes.map(n => [n.id, n]));
+  const fwd = model.edges.filter(e => !e.back);
+
+  const outMap = new Map(), inMap = new Map();
+  for(const n of nodes){ outMap.set(n.id, []); inMap.set(n.id, []); }
+  for(const e of fwd){ outMap.get(e.from).push(e); inMap.get(e.to).push(e); }
+
+  // 尺寸
+  for(const n of nodes){
+    const k = KINDS[n.kind];
+    let w;
+    if(n.kind === "decision") w = Math.max(k.w, textW(n.text) * 2 + 46);
+    else w = Math.max(k.w, textW(n.text) + 46);
+    n.w = Math.round(w);
+    n.h = k.h;
+  }
+
+  // 哪些节点能沿正向边走到「结束」节点
+  const terms = nodes.filter(n => n.kind === "terminator");
+  const endNode = terms.find(n => /结束|end|stop|返回/i.test(n.text)) || terms[terms.length - 1] || nodes[nodes.length - 1];
+  const reach = new Set([endNode.id]);
+  for(let ch = true; ch; ){
+    ch = false;
+    for(const e of fwd){
+      if(reach.has(e.to) && !reach.has(e.from)){ reach.add(e.from); ch = true; }
+    }
+  }
+
+  // 列分配：BFS，能到终点的那条出边留在本列，其余开新列
+  // 「否 / else」分支优先当主干，符合 if-else 的常见画法
+  const pri = (e) => {
+    const lab = (e.label || "").trim();
+    const isNo = /^(否|no|n|false|else)$/i.test(lab);
+    if(isNo && reach.has(e.to)) return 0;
+    return reach.has(e.to) ? 1 : 2;
+  };
+  const col = new Map();
+  const start = nodes.find(n => n.kind === "terminator") || nodes[0];
+  col.set(start.id, 0);
+  const q = [start.id];
+  while(q.length){
+    const cur = q.shift();
+    const outs = outMap.get(cur).slice().sort((a, b) => pri(a) - pri(b));
+    outs.forEach((e, i) => {
+      if(col.has(e.to)) return;
+      const c = col.get(cur);
+      col.set(e.to, i === 0 ? c : c + (c <= 0 ? -1 : 1));
+      q.push(e.to);
+    });
+  }
+  for(const n of nodes) if(!col.has(n.id)) col.set(n.id, 0);
+
+  // 纵坐标：rank = 正向边最长路径
+  const rank = new Map(nodes.map(n => [n.id, 0]));
+  for(let it = 0; it < nodes.length; it++){
+    let ch = false;
+    for(const e of fwd){
+      const r = rank.get(e.from) + 1;
+      if(r > rank.get(e.to)){ rank.set(e.to, r); ch = true; }
+    }
+    if(!ch) break;
+  }
+  const maxRank = Math.max(...rank.values(), 0);
+  const rows = Array.from({length: maxRank + 1}, () => []);
+  for(const n of nodes) rows[rank.get(n.id)].push(n);
+
+  // 列横向位置
+  const cols = [...new Set(col.values())].sort((a, b) => a - b);
+  const colW = new Map();
+  for(const c of cols){
+    const ns = nodes.filter(n => col.get(n.id) === c);
+    colW.set(c, Math.max(...ns.map(n => n.w)));
+  }
+  const GAPC = 70;
+  const colX = new Map();
+  let cursor = PAD;
+  for(const c of cols){
+    colX.set(c, cursor + colW.get(c) / 2);
+    cursor += colW.get(c) + GAPC;
+  }
+  const totalW = cursor - GAPC;
+
+  let y = PAD;
+  rows.forEach(row => {
+    const rh = row.length ? Math.max(...row.map(n => n.h)) : 0;
+    for(const n of row){
+      n.x = Math.round(colX.get(col.get(n.id)) - n.w / 2);
+      n.y = Math.round(y + (rh - n.h) / 2);
+    }
+    y += rh + GAP_Y;
+  });
+
+  // 连线折点
+  const minX = Math.min(...nodes.map(n => n.x));
+  for(const e of model.edges){
+    const a = map.get(e.from), b = map.get(e.to);
+    if(!a || !b){ e.pts = []; continue; }
+    const ac = col.get(a.id), bc = col.get(b.id);
+
+    if(e.back){
+      const xr = Math.max(8, Math.round(minX - 34));
+      const ayc = Math.round(a.y + a.h / 2);
+      const bx = Math.round(b.x + b.w / 2);
+      e.pts = [[a.x, ayc], [xr, ayc], [xr, Math.round(b.y - 26)], [bx, Math.round(b.y - 26)], [bx, b.y]];
+    } else if(ac === bc){
+      // 同列直连
+      const cx = Math.round(a.x + a.w / 2);
+      e.pts = [[cx, a.y + a.h], [cx, b.y]];
+    } else {
+      // 跨列：判断节点从顶点出，其它从侧边出
+      const toLeft = bc < ac;
+      let sx, sy;
+      if(a.kind === "decision"){
+        sx = toLeft ? a.x : a.x + a.w;
+        sy = Math.round(a.y + a.h / 2);
+      }else{
+        sx = Math.round(a.x + a.w / 2);
+        sy = a.y + a.h;
+      }
+      const tx = Math.round(b.x + b.w / 2);
+      if(a.kind === "decision"){
+        e.pts = [[sx, sy], [tx, sy], [tx, b.y]];
+      }else{
+        const midY = Math.round(sy + (b.y - sy) / 2);
+        e.pts = [[sx, sy], [sx, midY], [tx, midY], [tx, b.y]];
+      }
+    }
+
+    if(e.label){
+      const p = e.pts[0], q2 = e.pts[1];
+      if(Math.abs(p[0] - q2[0]) < 1){ e.lx = p[0] + 13; e.ly = Math.round((p[1] + q2[1]) / 2); }
+      else { e.lx = Math.round((p[0] + q2[0]) / 2); e.ly = p[1] - 11; }
+    }
+  }
+
+  model.width = Math.round(totalW + PAD * 2);
+  model.height = Math.round(y + PAD * 0.4);
+  return model;
+}
+
+/* ---------------- 预览 ---------------- */
+function render(model){
+  const W = model.width, H = model.height;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.style.background = "#fff";
+
+  const defs = document.createElementNS(NS, "defs");
+  defs.innerHTML = `<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#57606a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker>`;
+  svg.appendChild(defs);
+
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    for(const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  };
+
+  for(const e of model.edges){
+    if(!e.pts || e.pts.length < 2) continue;
+    const d = "M" + e.pts.map(p => `${p[0]} ${p[1]}`).join(" L");
+    svg.appendChild(el("path", {d, fill:"none", stroke:"#57606a", "stroke-width":1.2, "stroke-linejoin":"round", "marker-end":"url(#ar)"}));
+    if(e.label){
+      const t = el("text", {x:e.lx, y:e.ly, "font-size":12, fill:"#0a58ca", "text-anchor":"middle", "dominant-baseline":"central"});
+      t.textContent = e.label;
+      svg.appendChild(t);
+    }
+  }
+
+  for(const n of model.nodes){
+    const {x, y, w, h} = n;
+    const cxc = x + w / 2, cyc = y + h / 2;
+    let shape;
+    if(n.kind === "terminator"){
+      shape = el("rect", {x, y, width:w, height:h, rx:h/2, ry:h/2, fill:"#f2f7fd", stroke:"#1f2328", "stroke-width":1.2});
+    }else if(n.kind === "decision"){
+      shape = el("polygon", {points:`${x},${cyc} ${cxc},${y} ${x+w},${cyc} ${cxc},${y+h}`, fill:"#fdf6e6", stroke:"#1f2328", "stroke-width":1.2});
+    }else if(n.kind === "data"){
+      const g = w / 6;
+      shape = el("polygon", {points:`${x+g},${y} ${x+w},${y} ${x+w-g},${y+h} ${x},${y+h}`, fill:"#f7f5f0", stroke:"#1f2328", "stroke-width":1.2});
+    }else{
+      shape = el("rect", {x, y, width:w, height:h, fill:"#f7f5f0", stroke:"#1f2328", "stroke-width":1.2});
+    }
+    svg.appendChild(shape);
+
+    const t = el("text", {x:cxc, y:cyc, "font-size":13, fill:"#1f2328", "text-anchor":"middle", "dominant-baseline":"central"});
+    t.textContent = n.text;
+    svg.appendChild(t);
+  }
+
+  const box = document.getElementById("preview");
+  box.innerHTML = "";
+  box.appendChild(svg);
+  document.getElementById("dim").textContent = `${W} × ${H}`;
+}
+
+/* ---------------- 编译成 mdj ---------------- */
+function buildMdj(model){
+  const projectId = nid();
+  const fcId = nid();
+  const dgId = nid();
+
+  const fc = {"_type":"FCFlowchart", "_id":fcId, "_parent":{"$ref":projectId}, "name":model.title, "ownedElements":[]};
+  const views = [];
+  const modelIds = new Map(), viewIds = new Map();
+
+  // 节点模型
+  for(const n of model.nodes){
+    const mid = nid();
+    modelIds.set(n.id, mid);
+    fc.ownedElements.push({"_type":KINDS[n.kind].model, "_id":mid, "_parent":{"$ref":fcId}, "name":n.text, "ownedElements":[]});
+  }
+
+  // 连线模型挂在源节点下
+  const flowIds = [];
+  for(const e of model.edges){
+    const fid = nid();
+    flowIds.push({fid, e});
+    const fm = {"_type":"FCFlow", "_id":fid, "_parent":{"$ref":modelIds.get(e.from)},
+                "source":{"$ref":modelIds.get(e.from)}, "target":{"$ref":modelIds.get(e.to)}};
+    if(e.label) fm.name = e.label;
+    const owner = fc.ownedElements.find(m => m._id === modelIds.get(e.from));
+    if(owner) owner.ownedElements.push(fm);
+  }
+
+  // 节点视图
+  for(const n of model.nodes){
+    const vid = nid();
+    viewIds.set(n.id, vid);
+    let lx, ly, lw, lh;
+    if(n.kind === "decision"){
+      lx = n.x + n.w/4; ly = n.y + n.h/4; lw = n.w/2; lh = n.h/2;
+    }else if(n.kind === "data"){
+      const g = Math.floor(n.w/6);
+      lx = n.x + 10 + g; ly = n.y + (n.h-17)/2; lw = n.w - 20 - 2*g; lh = 17;
+    }else{
+      lx = n.x + 10; ly = n.y + (n.h-17)/2; lw = n.w - 20; lh = 17;
+    }
+    const lid = nid();
+    views.push({
+      "_type": KINDS[n.kind].model + "View", "_id": vid, "_parent":{"$ref":dgId},
+      "model":{"$ref":modelIds.get(n.id)},
+      "subViews":[{"_type":"LabelView","_id":lid,"_parent":{"$ref":vid},"font":FONT,
+                   "left":Math.round(lx),"top":Math.round(ly),"width":Math.round(lw),"height":lh,
+                   "text":n.text,"wordWrap":false}],
+      "font":FONT, "left":n.x, "top":Math.round(n.y), "width":n.w, "height":n.h,
+      "wordWrap":false, "nameLabel":{"$ref":lid}
+    });
+  }
+
+  // 连线视图
+  for(const {fid, e} of flowIds){
+    if(!e.pts || e.pts.length < 2) continue;
+    const eid = nid(), lid = nid();
+    const label = {"_type":"EdgeLabelView","_id":lid,"_parent":{"$ref":eid},
+      "model":{"$ref":fid}, "visible":!!e.label, "font":FONT,
+      "left":Math.round(e.pts[0][0]), "top":Math.round(e.pts[0][1]), "height":17,
+      "alpha":1.5707963267948966, "distance":15,
+      "hostEdge":{"$ref":eid}, "edgePosition":1};
+    if(e.label) label.text = e.label;
+    views.push({
+      "_type":"FCFlowView", "_id":eid, "_parent":{"$ref":dgId},
+      "model":{"$ref":fid}, "subViews":[label],
+      "fillColor":"#ffffd8", "font":FONT,
+      "head":{"$ref":viewIds.get(e.to)}, "tail":{"$ref":viewIds.get(e.from)},
+      "lineStyle":2,
+      "points": e.pts.map(p => `${p[0]}:${p[1]}`).join(";"),
+      "nameLabel":{"$ref":lid}
+    });
+  }
+
+  const diagram = {"_type":"FCFlowchartDiagram","_id":dgId,"_parent":{"$ref":fcId},
+                   "name":model.title + " - 图","defaultDiagram":true,"ownedViews":views};
+  fc.ownedElements.unshift(diagram);
+
+  return {"_type":"Project","_id":projectId,"name":model.title,"ownedElements":[fc]};
+}
+
+/* ---------------- 自检 ---------------- */
+function checkRefs(data){
+  const ids = new Set(), refs = [];
+  (function walk(o){
+    if(Array.isArray(o)) return o.forEach(walk);
+    if(o && typeof o === "object"){
+      if(o._id) ids.add(o._id);
+      for(const k in o){
+        if(k === "$ref") refs.push(o[k]);
+        else walk(o[k]);
+      }
+    }
+  })(data);
+  const miss = refs.filter(r => !ids.has(r));
+  return {ids:ids.size, refs:refs.length, miss};
+}
+
+/* ---------------- 主流程 ---------------- */
+let current = null;
+
+function analyze(){
+  const msg = document.getElementById("msg");
+  msg.className = "";
+  const model = parse(document.getElementById("src").value);
+
+  if(model.errors.length){
+    msg.className = "err";
+    msg.textContent = model.errors.slice(0, 6).join("\n");
+    document.getElementById("preview").innerHTML = "";
+    document.getElementById("stat").textContent = "";
+    current = null;
+    return null;
+  }
+
+  layout(model);
+  render(model);
+  document.getElementById("stat").textContent = `${model.nodes.length} 节点 · ${model.edges.length} 连线`;
+  msg.className = "ok";
+  msg.textContent = "解析成功。点「生成并下载 .mdj」导出。";
+  current = model;
+  return model;
+}
+
+document.getElementById("btnBuild").onclick = () => {
+  const model = analyze();
+  if(!model) return;
+  const data = buildMdj(model);
+  const {ids, refs, miss} = checkRefs(data);
+  if(miss.length){
+    document.getElementById("msg").className = "err";
+    document.getElementById("msg").textContent = "生成失败：有 " + miss.length + " 个引用没命中，这是 bug，请反馈。";
+    return;
+  }
+  const json = JSON.stringify(data, null, "\t");
+  const blob = new Blob([json], {type:"application/json;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (model.title || "diagram").replace(/[\\/:*?"<>|]/g, "_") + ".mdj";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+
+  document.getElementById("msg").className = "ok";
+  document.getElementById("msg").textContent =
+    `已生成并下载。自检：${ids} 个 id / ${refs} 个引用，全部命中。\n打开前请先关掉 StarUML，否则会被它内存里的旧版本覆盖。`;
+};
+
+document.getElementById("btnJson").onclick = async () => {
+  const model = analyze();
+  if(!model) return;
+  const json = JSON.stringify(buildMdj(model), null, "\t");
+  try{
+    await navigator.clipboard.writeText(json);
+    toast("JSON 已复制到剪贴板");
+  }catch(e){
+    toast("复制失败，请用生成的 .mdj 文件");
+  }
+};
+
+const DS_PROMPT = `你是流程图转写器。把用户的题目转成下面的 DSL，**只输出 DSL 文本，不要解释、不要代码块标记**。
+
+DSL 语法（每行一条）：
+
+1) 节点：  文本 | 类型
+   类型只有四种：
+   - terminator   开始 / 结束（起止框）
+   - process      处理、赋值、计算
+   - decision     判断（条件）
+   - data         输入 / 输出
+
+2) 连线：  A -> B
+   带分支标签：  A -> B : 是
+   循环回边：    A -> B : back
+   指定出线方向：A -> B : 是, left
+
+规则：
+- 节点文本必须唯一，连线用节点文本互相引用，不要用编号。
+- 循环回到前面判断的线，必须标 back，否则图会拉得很长。
+- 判断框必须正好两条出线，并分别标「是」「否」。
+- 只画流程，不要加标题说明。
+
+示例：
+title: 求 1 到 n 的和
+开始 | terminator
+输入 n | data
+sum ← 0, i ← 1 | process
+i ≤ n ? | decision
+sum ← sum + i | process
+i ← i + 1 | process
+输出 sum | data
+结束 | terminator
+开始 -> 输入 n
+输入 n -> sum ← 0, i ← 1
+sum ← 0, i ← 1 -> i ≤ n ?
+i ≤ n ? -> sum ← sum + i : 是
+sum ← sum + i -> i ← i + 1
+i ← i + 1 -> i ≤ n ? : back
+i ≤ n ? -> 输出 sum : 否
+输出 sum -> 结束`;
+
+document.getElementById("btnCopyPrompt").onclick = async () => {
+  try{
+    await navigator.clipboard.writeText(DS_PROMPT);
+    toast("说明已复制，粘贴给 DeepSeek");
+  }catch(e){
+    toast("复制失败，请手动复制（浏览器权限）");
+  }
+};
+
+const SAMPLE = `title: 第1题 求和与平均值
+开始 | terminator
+输入 i | data
+sum ← 0, n ← 1 | process
+n ≤ i ? | decision
+sum ← sum + n | process
+n ← n + 1 | process
+avg ← sum / i | process
+输出 sum、avg | data
+结束 | terminator
+开始 -> 输入 i
+输入 i -> sum ← 0, n ← 1
+sum ← 0, n ← 1 -> n ≤ i ?
+n ≤ i ? -> sum ← sum + n : 是
+sum ← sum + n -> n ← n + 1
+n ← n + 1 -> n ≤ i ? : back
+n ≤ i ? -> avg ← sum / i : 否
+avg ← sum / i -> 输出 sum、avg
+输出 sum、avg -> 结束`;
+
+document.getElementById("btnSample").onclick = () => {
+  document.getElementById("src").value = SAMPLE;
+  analyze();
+};
+document.getElementById("btnClear").onclick = () => {
+  document.getElementById("src").value = "";
+  document.getElementById("preview").innerHTML = "";
+  document.getElementById("msg").className = "";
+  document.getElementById("msg").textContent = "等待输入。";
+  document.getElementById("stat").textContent = "";
+  current = null;
+};
+
+let tTimer = null;
+document.getElementById("src").addEventListener("input", () => {
+  clearTimeout(tTimer);
+  tTimer = setTimeout(() => {
+    if(document.getElementById("src").value.trim()) analyze();
+  }, 350);
+});
+
+function toast(t){
+  const el = document.getElementById("toast");
+  el.textContent = t;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+const helpBox = document.getElementById("help");
+document.getElementById("btnHelp").onclick = () => helpBox.classList.add("show");
+document.getElementById("btnHelpClose").onclick = () => helpBox.classList.remove("show");
+helpBox.addEventListener("click", (e) => { if(e.target === helpBox) helpBox.classList.remove("show"); });
+document.addEventListener("keydown", (e) => { if(e.key === "Escape") helpBox.classList.remove("show"); });
+
+document.getElementById("src").value = SAMPLE;
+analyze();
+
+try{
+  if(!localStorage.getItem("mdjkit_help_seen")){
+    helpBox.classList.add("show");
+    localStorage.setItem("mdjkit_help_seen", "1");
+  }
+}catch(e){ /* file:// 下 localStorage 可能不可用，忽略 */ }
+</script>
+</body>
+</html>
