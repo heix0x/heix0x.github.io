@@ -34,4 +34,8 @@
 给 AI 助手的算法讲解 skill。最小例子、可执行比喻、逐步配表 —— 讲到你自己拿笔能算完。<br>
 <sub>Skill · 纯文档</sub>
 
+**[GitHub 发布](https://github.com/heix0x/github-release)**
+把本地项目一路推到发版上线：建仓库、打 tag、传附件、设 About。git 连不上时改走 API 通道。<br>
+<sub>Skill · Python</sub>
+
 [关于](/about/) · [GitHub](https://github.com/heix0x)
