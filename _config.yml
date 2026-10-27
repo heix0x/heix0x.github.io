@@ -4,6 +4,10 @@ title: heix0x
 # 站点描述：搜索引擎结果里显示这一句
 description: 软件工程 · Java 后端
 
+# 页面语言。不设的话主题会默认输出 <html lang="en-US">，
+# 中文页面标成英文，影响断行规则、屏幕阅读器发音和搜索引擎的语言判断。
+lang: zh-CN
+
 # 主题。只能用 GitHub 白名单里的那几个，预览见 https://pages.github.com/themes/
 theme: jekyll-theme-minimal
 
